@@ -1,0 +1,57 @@
+lan external {
+    ipv4 11.10.12.0/24
+}
+
+lan dmz as "DMZ" {
+    ipv4 172.16.26.0/24
+}
+
+lan internal as "内部网络" {
+    ipv4 172.16.36.0/24
+
+    terminal background-terminal as "背景主机01" use "/vsphere/demo/background-terminal"
+}
+
+router extra-router {
+    // port[172.16.46.1/24] to router[172.16.46.2/24]
+}
+
+router extra-router2 {
+    port[172.16.26.1/24] to router(1)
+}
+
+router router as "路由器" {
+    port in external {
+        ipv4 11.10.12.1
+    }
+
+    port in dmz
+
+    port in internal[172.16.36.1]
+
+    route_table {
+        172.16.36.0/24 -> 172.16.36.1
+        172.16.26.0/24 -> 172.16.26.1
+    }
+}
+
+attacker attacker-xp in external {
+    template "/vsphere/common/attacker-xp"
+}
+
+server web-server as "Web服务器" in dmz[172.16.26.10] {
+    template "/vsphere/demo/web-server"
+}
+
+server dns-server in dmz[172.16.26.253] {
+    template "/vsphere/common/dns-server"
+    global_dns true
+    option dns_list [
+        {name: "www.blog.com", ip: 172.16.26.10},
+        {name: "www.demo.net", ip: 172.16.26.10},
+    ]
+}
+
+terminal internal-xp in internal[172.16.36.2] {
+    template "/vsphere/demo/internal-xp"
+}

@@ -1,0 +1,4 @@
+Cython
+lark-parser==0.6.4
+lxml==4.2.5
+mistletoe==0.7.1

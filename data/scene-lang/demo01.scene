@@ -1,0 +1,37 @@
+lan external {
+    ipv4 11.10.12.0/24
+}
+
+lan dmz {
+    ipv4 172.16.26.0/24
+}
+
+lan internal {
+    ipv4 172.16.36.0/24
+}
+
+router router as "路由器" {
+    port 1 in external {
+        ipv4 11.10.12.1
+    }
+
+    port 2 in dmz
+
+    port 3 in internal
+}
+
+host attacker-xp in external {
+    template "/vsphere/common/attacker-xp"
+}
+
+host web-server as "Web服务器" in dmz(172.16.26.10) {
+    template "/vsphere/demo/web-server"
+}
+
+host dns-server in dmz(172.16.26.253) {
+    template "/vsphere/common/dns-server"
+}
+
+host internal-xp in internal(172.16.36.2) {
+    template "/vsphere/demo/internal-xp"
+}
