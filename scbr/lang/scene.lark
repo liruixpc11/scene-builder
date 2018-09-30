@@ -39,10 +39,12 @@ _host_attr_line: ipv4_addr_line
     | port
     | global_dns_line
     | generic_option
+    | flag
 global_dns_line: "global_dns" BOOLEAN
 ipv4_addr_line: IPV4 IPV4_ADDR
 template_line: TEMPLATE ESCAPED_STRING
-port: PORT (host_in_lan | port_to_port) ("{" _port_attr_line* "}")?
+port: PORT (INT | ID)? (host_in_lan | port_to_port)? ("{" _port_attr_line* "}")?
+flag: (FIXED_FLAG | FLAG) ID "(" INT ")" ESCAPED_STRING
 
 // TODO: direct TO PORT
 port_to_port: _ip_attr? TO ID (node_port_id | node_port_ip)?
@@ -56,6 +58,7 @@ _router_attr_line: template_line
     | port
     | route_table
     | generic_option
+    | flag
 
 generic_option: OPTION ID _option_value
 
@@ -103,6 +106,8 @@ TERMINAL: "terminal"
 ENV: "env"
 
 OPTION: "option"
+FLAG: "flag"
+FIXED_FLAG: "fixed_flag"
 
 TO: "to"
 IN: "in"

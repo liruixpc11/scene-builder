@@ -1,8 +1,11 @@
 from enum import Enum
 import ipaddress
+import logging
 
 from scbr.topo import Topology, Node, NodeCategory
 from scbr.utils import auto_str
+
+LOG = logging.getLogger(__name__)
 
 
 class NodeRole(Enum):
@@ -50,12 +53,25 @@ class Scene:
                     port.lan = self.lans[port.in_lan.lan_id]
                     if node not in port.lan.hosts:
                         port.lan.hosts.append(node)
+                elif port.to_port:
+                    to_port = port.to_port
+                    to_port.peer_node = self.query_node(to_port.peer_node_id)
+                    if to_port.peer_port_name:
+                        to_port.peer_port = to_port.peer_node.query_port(to_port.peer_port_name)
 
     @property
     def node_list(self):
         nodes = list(self.routers.values())
         nodes.extend(self.hosts.values())
         return nodes
+
+    def query_node(self, node_id):
+        if node_id in self.hosts:
+            return self.hosts[node_id]
+        elif node_id in self.routers:
+            return self.routers[node_id]
+        else:
+            raise Exception('host/router {} not found'.format(node_id))
 
     def extract_topology(self):
         topology = Topology()
@@ -65,27 +81,52 @@ class Scene:
 
         for host in self.hosts.values():
             node = host.to_node(self)
-            self.handle_ports(topology, host, node)
             topology.add_node(node)
 
         for router in self.routers.values():
             node = router.to_node(self)
-            self.handle_ports(topology, router, node)
             topology.add_node(node)
+
+        for node in self.node_list:
+            host = topology.query_node(node.id)
+            self.handle_ports(topology, node, host)
 
         return topology
 
-    def handle_ports(self, topology, entity, node):
+    def handle_ports(self, topology, entity, host):
         for port in entity.ports:
-            self.handle_port(topology, node, port)
+            self.handle_port(topology, host, port)
 
-    def handle_port(self, topology, node, node_port):
-        switch = topology.query_node(node_port.in_lan.lan_id)
-        lan = self.lans[node_port.in_lan.lan_id]
-        ip = node_port.in_lan.ip
-        port, _ = node.link_to_node(switch)
-        if ip:
-            port.config_ip(ip, lan.net.netmask)
+    def handle_port(self, topology, host, node_port):
+        if node_port.in_lan:
+            switch = topology.query_node(node_port.in_lan.lan_id)
+            lan = self.lans[node_port.in_lan.lan_id]
+            ip = node_port.in_lan.ip
+            port, _ = host.link_to_node(switch)
+            if ip:
+                port.config_ip(ip, lan.net.netmask)
+        elif node_port.to_port:
+            to_port = node_port.to_port
+            other_host = topology.query_node(node_port.to_port.peer_node_id)
+
+            if to_port.peer_port:
+                if to_port.peer_port.connected:
+                    return
+                p2 = other_host.add_port()
+                to_port.peer_port.connected = True
+            else:
+                p2 = other_host.add_port()
+
+            p1 = host.add_port()
+            p1.link_to_port(p2)
+            if to_port.self_ip:
+                p1.config_ip(to_port.self_ip.ip, to_port.self_ip.netmask)
+            if to_port.peer_ip:
+                p2.config_ip(to_port.peer_ip.ip, to_port.peer_ip.netmask)
+
+            node_port.connected = True
+        else:
+            LOG.info("port of %s without connection", host.name)
 
     def find_template(self, template_id):
         if template_id in self.templates:
@@ -161,6 +202,7 @@ class HostBase:
         self.template_id = None
         self.ports = []
         self.options = dict()
+        self.flags = []
 
     def to_node(self, scene):
         node = Node(self.id, self.name, NodeCategory.Host, self.template_id, self.options)
@@ -178,6 +220,13 @@ class HostBase:
 
         node.use_default_physic()
         return node
+
+    def query_port(self, port_name):
+        for port in self.ports:
+            if port.name == port_name:
+                return port
+
+        raise Exception('port {} on node {} not found'.format(port_name, self.name))
 
 
 @auto_str()
@@ -244,15 +293,15 @@ class IpWithMask:
 @auto_str()
 class PortToPort:
     def __init__(self, node_id):
-        self.node_id = node_id
-        self.port_name = None
+        self.peer_node_id = node_id
+        self.peer_port_name = None
 
         self.self_ip = None
         self.peer_ip = None
 
         # fill with scene.adjust()
-        self.node = None
-        self.port = None
+        self.peer_node = None
+        self.peer_port = None
 
 
 @auto_str()
@@ -261,6 +310,7 @@ class NodePort:
         self.name = name
         self.in_lan = in_lan_or_to_port if isinstance(in_lan_or_to_port, HostInLan) else None
         self.to_port = in_lan_or_to_port if isinstance(in_lan_or_to_port, PortToPort) else None
+        self.connected = False
 
 
 @auto_str()
@@ -268,3 +318,17 @@ class HostInLan:
     def __init__(self, lan_id, ip):
         self.lan_id = lan_id
         self.ip = ip
+
+
+class FlagType(Enum):
+    RANDOM = 1
+    FIXED = 2
+
+
+class Flag:
+    def __init__(self, type_, name, score, content):
+        self.type = type_
+        self.name = name
+        self.score = score
+        self.content = content
+

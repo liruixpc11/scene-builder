@@ -97,6 +97,10 @@ class Port:
         self.options['defaultGateway'] = Option(default_gateway, 'ip')
         self.options['dns'] = Option(dns, 'ip')
 
+    def link_to_port(self, other):
+        link = Link(self, other)
+        self.link = other.link = link
+
 
 @auto_str()
 class Option:

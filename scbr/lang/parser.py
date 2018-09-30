@@ -3,9 +3,10 @@ import os
 from pprint import pprint
 import ipaddress
 from lark import Lark, Transformer, Tree
+from lark.lexer import Token
 
 from scbr.scene import Scene, Lan, Host, HostInLan, Router, NodePort, NodeRole, NodeTemplate, Environment, RouteEntry, \
-    RouteTable, IpWithMask, PortToPort
+    RouteTable, IpWithMask, PortToPort, Flag, FlagType
 from scbr.topo import Option
 
 with open(os.path.join(os.path.dirname(__file__), "scene.lark")) as f:
@@ -68,6 +69,15 @@ class DictOptionEntry:
 class EntityName:
     def __init__(self, name):
         self.name = name
+
+
+class FlagOption(EntityOption):
+    def config(self, entity):
+        entity.flags.append(self.flag)
+
+    def __init__(self, flag):
+        self.flag = flag
+
 
 
 class SceneTransformer(Transformer):
@@ -163,7 +173,10 @@ class SceneTransformer(Transformer):
         return TemplateOption(_extract_str(matches[1]))
 
     def port(self, matches):
-        port = NodePort(matches[1])
+        if isinstance(matches[1], Token):
+            port = NodePort(matches[2] if len(matches) > 2 else None, name=matches[1].value)
+        else:
+            port = NodePort(matches[1])
         for option in matches[2:]:
             if isinstance(option, (ipaddress.IPv4Address, ipaddress.IPv6Address)):
                 port.in_lan.ip = str(option)
@@ -182,7 +195,7 @@ class SceneTransformer(Transformer):
 
         m = matches[base + 2]
         if isinstance(m, EntityName):
-            to_port.port_name = m.name
+            to_port.peer_port_name = m.name
         elif isinstance(m, IpWithMask):
             to_port.peer_ip = m
 
@@ -261,6 +274,14 @@ class SceneTransformer(Transformer):
         if key.type == 'ESCAPED_STRING':
             key = _extract_str(key)
         return DictOptionEntry(key, value)
+
+    def flag(self, matches):
+        if matches[0].value == 'fixed_flag':
+            type_ = FlagType.FIXED
+        else:
+            type_ = FlagType.RANDOM
+
+        return FlagOption(Flag(type_, matches[1].value, int(matches[2].value), matches[3].value))
 
 
 def _extract_str(token):

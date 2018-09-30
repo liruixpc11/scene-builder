@@ -13,7 +13,7 @@ lan internal as "内部网络" {
 }
 
 router extra-router {
-    // port[172.16.46.1/24] to router[172.16.46.2/24]
+    port[172.16.46.1/24] to router[172.16.46.2/24]
 }
 
 router extra-router2 {
@@ -21,6 +21,8 @@ router extra-router2 {
 }
 
 router router as "路由器" {
+    port 1
+
     port in external {
         ipv4 11.10.12.1
     }
@@ -41,6 +43,8 @@ attacker attacker-xp in external {
 
 server web-server as "Web服务器" in dmz[172.16.26.10] {
     template "/vsphere/demo/web-server"
+
+    flag WEB01(20) "/home/wordpress/flag"
 }
 
 server dns-server in dmz[172.16.26.253] {
@@ -50,8 +54,12 @@ server dns-server in dmz[172.16.26.253] {
         {name: "www.blog.com", ip: 172.16.26.10},
         {name: "www.demo.net", ip: 172.16.26.10},
     ]
+
+    flag DNS01(20) "/flag"
 }
 
 terminal internal-xp in internal[172.16.36.2] {
     template "/vsphere/demo/internal-xp"
+
+    flag PWN01(20) "C:\\flag.txt"
 }
